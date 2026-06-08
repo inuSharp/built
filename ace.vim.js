@@ -155,7 +155,7 @@
     editor.session.setMode(options.mode || "ace/mode/plain_text");
     editor.renderer.setShowGutter(false);
     editor.setShowPrintMargin(false);
-    editor.setOption("fontFamily", options.fontFamily || "Consolas, 'Lucida Console', 'MS Gothic'");
+    editor.setOption("fontFamily", options.fontFamily || "'Menlo', 'Monaco', Consolas, 'Lucida Console', 'MS Gothic', monospace");
     editor.setKeyboardHandler("ace/keyboard/vim");
     editor.setValue(textarea.value, -1);
     editor.focus();
