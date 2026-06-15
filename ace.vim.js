@@ -227,6 +227,10 @@
     // クリップボード統合
     (function() {
       let lastYTime = 0;
+      let lastDTime = 0;
+      let lastDLine = "";
+      let lastSTime = 0;
+      let _register = "";
 
       function getVimStatus() {
         const handler = editor.keyBinding.getKeyboardHandler();
@@ -239,11 +243,8 @@
         return !getVimStatus().match(/INSERT|VISUAL|REPLACE/);
       }
 
-      function isVisualMode() {
-        return getVimStatus().indexOf("VISUAL") !== -1;
-      }
-
       function copyToClipboard(text) {
+        _register = text;
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(text).catch(function() { fallbackCopy(text); });
         } else {
@@ -263,36 +264,46 @@
         editor.focus();
       }
 
-      function pasteFromClipboard(after) {
-        navigator.clipboard.readText().then(function(text) {
-          if (!text) return;
-          const pos = editor.getCursorPosition();
-          const linewise = text.endsWith("\n");
+      function pasteText(text, after) {
+        if (!text) return;
+        const pos = editor.getCursorPosition();
+        const linewise = text.endsWith("\n");
 
-          if (linewise) {
-            const content = text.slice(0, -1);
-            if (after) {
-              const lineLen = editor.session.getLine(pos.row).length;
-              editor.session.insert({ row: pos.row, column: lineLen }, "\n" + content);
-              editor.moveCursorTo(pos.row + 1, 0);
-            } else {
-              editor.session.insert({ row: pos.row, column: 0 }, content + "\n");
-              editor.moveCursorTo(pos.row, 0);
-            }
+        if (linewise) {
+          const content = text.slice(0, -1);
+          if (after) {
+            const lineLen = editor.session.getLine(pos.row).length;
+            editor.session.insert({ row: pos.row, column: lineLen }, "\n" + content);
+            editor.moveCursorTo(pos.row + 1, 0);
           } else {
-            if (after) {
-              const line = editor.session.getLine(pos.row);
-              const col = Math.min(pos.column + 1, line.length);
-              editor.session.insert({ row: pos.row, column: col }, text);
-            } else {
-              editor.session.insert(pos, text);
-            }
+            editor.session.insert({ row: pos.row, column: 0 }, content + "\n");
+            editor.moveCursorTo(pos.row, 0);
           }
+        } else {
+          if (after) {
+            const line = editor.session.getLine(pos.row);
+            const col = Math.min(pos.column + 1, line.length);
+            editor.session.insert({ row: pos.row, column: col }, text);
+          } else {
+            editor.session.insert(pos, text);
+          }
+        }
+      }
+
+      function pasteFromClipboard(after) {
+        if (_register) {
+          pasteText(_register, after);
+          return;
+        }
+        navigator.clipboard.readText().then(function(text) {
+          pasteText(text, after);
         }).catch(function() {});
       }
 
-      editor.container.addEventListener("keydown", function(e) {
-        if (e.key === "y" && isVisualMode()) {
+      document.addEventListener("keydown", function(e) {
+        if (!editor.container.contains(e.target)) return;
+
+        if ((e.key === "y" || e.key === "d") && !editor.selection.isEmpty()) {
           const text = editor.getSelectedText();
           if (text) copyToClipboard(text);
           return;
@@ -300,6 +311,34 @@
 
         if (!isNormalMode()) {
           lastYTime = 0;
+          lastDTime = 0;
+          lastSTime = 0;
+          return;
+        }
+
+        if (lastSTime > 0) {
+          const elapsed = Date.now() - lastSTime;
+          lastSTime = 0;
+          if (elapsed < 1000) {
+            if (e.key === "l" && typeof options.focusNext === "function") {
+              e.preventDefault();
+              e.stopPropagation();
+              options.focusNext();
+              return;
+            }
+            if (e.key === "h" && typeof options.focusPrev === "function") {
+              e.preventDefault();
+              e.stopPropagation();
+              options.focusPrev();
+              return;
+            }
+          }
+        }
+
+        if (e.key === "s") {
+          e.preventDefault();
+          e.stopPropagation();
+          lastSTime = Date.now();
           return;
         }
 
@@ -318,6 +357,27 @@
         }
 
         lastYTime = 0;
+
+        if (e.key === "d") {
+          const now = Date.now();
+          if (lastDTime > 0 && now - lastDTime < 1000) {
+            lastDTime = 0;
+            copyToClipboard(lastDLine + "\n");
+          } else {
+            lastDTime = now;
+            lastDLine = editor.session.getLine(editor.getCursorPosition().row);
+          }
+          return;
+        }
+
+        lastDTime = 0;
+
+        if (e.key === "x") {
+          const pos = editor.getCursorPosition();
+          const ch = editor.session.getLine(pos.row).charAt(pos.column);
+          if (ch) copyToClipboard(ch);
+          return;
+        }
 
         if (e.key === "p" || e.key === "P") {
           e.preventDefault();
