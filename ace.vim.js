@@ -39,12 +39,14 @@
       statusBar:  { background: "#f0f0f0", color: "#888" },
     },
     dark: {
-      background: "#1e1e1e",
-      scroller:   "#161616",
-      color:      "#d4d4d4",
-      activeLine: "#2a2d2e",
-      cursor:     "#aeafad",
-      statusBar:  { background: "#252526", color: "#aaa" },
+      background:   "#1e1e1e",
+      scroller:     "#161616",
+      color:        "#d4d4d4",
+      activeLine:   "#2a2d2e",
+      activeBorder: "rgba(255,255,255,0.5)",
+      cursor:       "#aeafad",
+      selection:    "#c8dff0",
+      statusBar:    { background: "#252526", color: "#aaa" },
     },
     solarized: {
       background: "#fdf6e3",
@@ -175,8 +177,14 @@
         s.textContent =
           "#" + editorDiv.id + " .ace_text-layer { color: " + t.color + " !important; }" +
           "#" + editorDiv.id + " .ace_cursor      { border-left-color: " + t.cursor + " !important; }" +
-          "#" + editorDiv.id + " .ace_active-line  { background: " + t.activeLine + " !important; }" +
-          "#" + editorDiv.id + " .ace_text-input   { color: " + t.color + " !important; background: " + t.background + " !important; }";
+          "#" + editorDiv.id + " .ace_active-line  { background: " + t.activeLine + " !important;" +
+            (t.activeBorder ? " box-shadow: inset 0 1px 0 0 " + t.activeBorder + ", inset 0 -1px 0 0 " + t.activeBorder + ";" : "") +
+          " }" +
+          "#" + editorDiv.id + " .ace_text-input   { color: " + t.color + " !important; background: " + t.background + " !important; }" +
+          (t.selection
+            ? "#" + editorDiv.id + " .ace_selection { background: " + t.selection + " !important; }" +
+              "#" + editorDiv.id + " .ace_layer.ace_text-layer { mix-blend-mode: difference; }"
+            : "");
         document.head.appendChild(s);
       }
       statusBar.style.color      = (t.statusBar && t.statusBar.color)      || "#888";
@@ -303,7 +311,7 @@
       document.addEventListener("keydown", function(e) {
         if (!editor.container.contains(e.target)) return;
 
-        if ((e.key === "y" || e.key === "d") && !editor.selection.isEmpty()) {
+        if ((e.key === "y" || e.key === "d" || e.key === "x") && !editor.selection.isEmpty()) {
           const text = editor.getSelectedText();
           if (text) copyToClipboard(text);
           return;
@@ -376,6 +384,33 @@
           const pos = editor.getCursorPosition();
           const ch = editor.session.getLine(pos.row).charAt(pos.column);
           if (ch) copyToClipboard(ch);
+          return;
+        }
+
+        if (e.key === "*") {
+          e.preventDefault();
+          e.stopPropagation();
+          const pos = editor.getCursorPosition();
+          const line = editor.session.getLine(pos.row);
+          const wordRe = /\w+/g;
+          let word = "";
+          let m;
+          while ((m = wordRe.exec(line)) !== null) {
+            if (m.index <= pos.column && pos.column < m.index + m[0].length) {
+              word = m[0];
+              break;
+            }
+          }
+          if (word) {
+            editor.find(word, {
+              backwards: false,
+              wrap: true,
+              caseSensitive: true,
+              wholeWord: true,
+              regExp: false,
+              skipCurrent: true
+            });
+          }
           return;
         }
 
