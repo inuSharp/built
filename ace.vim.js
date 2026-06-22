@@ -239,6 +239,39 @@
       let lastDLine = "";
       let lastSTime = 0;
       let _register = "";
+      let starSearchActive = false;
+      let starWord = "";
+      let starRange = null;
+
+      // * 検索および n / N の共通処理。
+      // editor.find はマッチを選択状態にする（→ vim が VISUAL に入る）ため、
+      // 検索後に選択を解除してカーソルだけをマッチ先頭へ移動させ NORMAL を保つ。
+      function starSearch(backwards) {
+        if (!starWord) return;
+        const cursor = editor.getCursorPosition();
+        const opts = {
+          needle: starWord,
+          backwards: backwards,
+          wrap: true,
+          caseSensitive: true,
+          wholeWord: true,
+          regExp: false,
+          skipCurrent: true
+        };
+        // カーソルが直前のマッチ先頭にあるときは、その範囲を start に渡して
+        // skipCurrent を効かせ、確実に次（前）のマッチへ進める。
+        if (starRange &&
+            cursor.row === starRange.start.row &&
+            cursor.column === starRange.start.column) {
+          opts.start = starRange;
+        }
+        const found = editor.find(starWord, opts);
+        if (found) {
+          starRange = found;
+          editor.moveCursorToPosition(found.start);
+          editor.clearSelection();
+        }
+      }
 
       function getVimStatus() {
         const handler = editor.keyBinding.getKeyboardHandler();
@@ -249,6 +282,10 @@
 
       function isNormalMode() {
         return !getVimStatus().match(/INSERT|VISUAL|REPLACE/);
+      }
+
+      function isInsertMode() {
+        return !!getVimStatus().match(/INSERT|REPLACE/);
       }
 
       function copyToClipboard(text) {
@@ -314,6 +351,15 @@
         if ((e.key === "y" || e.key === "d" || e.key === "x") && !editor.selection.isEmpty()) {
           const text = editor.getSelectedText();
           if (text) copyToClipboard(text);
+          return;
+        }
+
+        // * 検索後の n / N は同じ大文字小文字区別検索を繰り返す。
+        // INSERT/REPLACE 以外なら処理する（starSearch 内で選択は解除される）。
+        if (starSearchActive && (e.key === "n" || e.key === "N") && !isInsertMode()) {
+          e.preventDefault();
+          e.stopPropagation();
+          starSearch(e.key === "N");
           return;
         }
 
@@ -402,14 +448,10 @@
             }
           }
           if (word) {
-            editor.find(word, {
-              backwards: false,
-              wrap: true,
-              caseSensitive: true,
-              wholeWord: true,
-              regExp: false,
-              skipCurrent: true
-            });
+            starWord = word;
+            starRange = null;
+            starSearchActive = true;
+            starSearch(false);
           }
           return;
         }
