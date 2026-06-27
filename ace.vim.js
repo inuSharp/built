@@ -45,6 +45,7 @@
       activeLine:   "#2a2d2e",
       activeBorder: "rgba(255,255,255,0.5)",
       cursor:       "#aeafad",
+      cursorNormal: "#ffffff",
       selection:    "#c8dff0",
       statusBar:    { background: "#252526", color: "#aaa" },
     },
@@ -157,6 +158,9 @@
     editor.session.setMode(options.mode || "ace/mode/plain_text");
     editor.renderer.setShowGutter(false);
     editor.setShowPrintMargin(false);
+    // インデントガイド（インデント位置に表示される縦線）を無効化。
+    // プログラミング用途ではないため邪魔になるので非表示にする。
+    editor.setOption("displayIndentGuides", false);
     editor.setOption("fontFamily", options.fontFamily || "'Menlo', 'Monaco', Consolas, 'Lucida Console', 'MS Gothic', monospace");
     editor.setKeyboardHandler("ace/keyboard/vim");
     editor.setValue(textarea.value, -1);
@@ -184,6 +188,10 @@
           (t.selection
             ? "#" + editorDiv.id + " .ace_selection { background: " + t.selection + " !important; }" +
               "#" + editorDiv.id + " .ace_layer.ace_text-layer { mix-blend-mode: difference; }"
+            : "") +
+          "#" + editorDiv.id + " input { color: #000000 !important; }" +
+          (t.cursorNormal
+            ? "#" + editorDiv.id + ":not(.vim-insert):not(.vim-replace) .ace_cursor { background-color: " + t.cursorNormal + " !important; border-left-color: " + t.cursorNormal + " !important; }"
             : "");
         document.head.appendChild(s);
       }
@@ -239,6 +247,7 @@
       let lastDLine = "";
       let lastSTime = 0;
       let _register = "";
+      let inVimSearchMode = false;
       let starSearchActive = false;
       let starWord = "";
       let starRange = null;
@@ -286,6 +295,14 @@
 
       function isInsertMode() {
         return !!getVimStatus().match(/INSERT|REPLACE/);
+      }
+
+      function updateVimModeClass() {
+        if (isInsertMode()) {
+          editorDiv.classList.add("vim-insert");
+        } else {
+          editorDiv.classList.remove("vim-insert");
+        }
       }
 
       function copyToClipboard(text) {
@@ -348,11 +365,21 @@
       document.addEventListener("keydown", function(e) {
         if (!editor.container.contains(e.target)) return;
 
+        setTimeout(updateVimModeClass, 0);
+
         if ((e.key === "y" || e.key === "d" || e.key === "x") && !editor.selection.isEmpty()) {
           const text = editor.getSelectedText();
           if (text) copyToClipboard(text);
           return;
         }
+
+        if (e.key === "/" && isNormalMode()) {
+          inVimSearchMode = true;
+        }
+        if (e.key === "Enter" || e.key === "Escape") {
+          inVimSearchMode = false;
+        }
+        if (inVimSearchMode) return;
 
         // * 検索後の n / N は同じ大文字小文字区別検索を繰り返す。
         // INSERT/REPLACE 以外なら処理する（starSearch 内で選択は解除される）。
